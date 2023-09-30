@@ -1,0 +1,17 @@
+#!/bin/sh
+
+if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+  echo "Outputs template whose output can be piped to an environment file.
+
+This script is typically run by the 'dotenv-generate' script.
+
+NOTE: To use this script's default values, any matching environment variables
+must first be unset.
+
+Optional flags:
+  --force - Overwrite an existing dotenv file"
+  exit
+fi
+
+echo "POSTGRES_USER=\"${POSTGRES_USER:-postgres}\"
+POSTGRES_PASSWORD=\"${POSTGRES_PASSWORD:-postgres}\""

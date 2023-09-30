@@ -1,0 +1,53 @@
+#!/bin/sh
+
+if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+  echo "This script bootstraps a copy of '.env' using any currently-exported environment variables.
+
+Optional flags:
+  --force - Overwrite an existing dotenv file"
+  exit
+fi
+
+project_root_directory="$(dirname "$0")"
+cd "$project_root_directory" || exit 1
+
+dotenv_path="$(pwd)/.env"
+
+# get last arg
+for last_arg; do true; done
+
+if [ -f "$dotenv_path" ]; then
+
+  if [ "$last_arg" = "--force" ]; then
+    # import existing dotenv
+    echo "Importing existing environment from '$dotenv_path'"
+    set -o allexport
+    # shellcheck source=/dev/null
+    . "$dotenv_path"
+    set +o allexport
+
+    # we will overwrite the dotenv file
+    echo "Overwriting existing dotenv file: '$dotenv_path'..."
+
+  else
+    # exit without writing the dotenv file
+    printf "\033[31mDotenv file already exists: '%s'.\033[39m\nPass '--force' as the last positional argument to overwrite this file.\n" "$dotenv_path"
+    echo "Aborting..."
+    exit 1
+  fi
+else
+  echo "Generating local environment: '$dotenv_path'..."
+fi
+
+dotenv_template_path="$(pwd)/dotenv-generate--template"
+output_string="$($dotenv_template_path "$@")"
+
+if [ "$DRY_RUN" = 1 ]; then
+  echo "$output_string"
+else
+  # create the .env file
+  echo "$output_string" >"$dotenv_path"
+
+  # set permissions on the newly-created .env file
+  chmod 600 "$dotenv_path"
+fi

@@ -1,0 +1,22 @@
+---
+services:
+  postgres:
+    hostname: "postgres"
+    image: "docker.io/postgres:16"
+    restart: "always"
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER:-postgres}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?}"
+    volumes:
+      - "postgres:/var/lib/postgresql/data"
+    networks:
+      - "postgres"
+    ports:
+      - "5432"
+
+networks:
+  postgres:
+    external: true
+
+volumes:
+  postgres:

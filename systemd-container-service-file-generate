@@ -1,0 +1,127 @@
+#!/bin/sh
+service_name="postgres"
+service_file="${HOME}/systemd/user/${service_name}.service"
+
+if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+  echo "This script generates a user-level systemd service file.
+
+It can run a combination of Phoenix, Postgres, and Traefik containers.
+
+Optional arguments:
+
+  --dry-run - Only displays the output of this script. Does not write any files.
+
+  --podman - Use Podman instead of Docker.
+
+After running this script:
+
+  - The output will be sent here:
+    - '$service_file'
+
+  - Before you can manage the systemd service, you will need to reload the systemd daemons:
+    - systemctl --user daemon-reload
+
+  - To enable this service:
+    - systemctl --user enable $service_name.service
+
+  - To start this service:
+    - systemctl --user start $service_name.service
+
+  - In order to start this service on boot, you must enabling lingering for this user:
+    - sudo loginctl enable-linger $USER
+
+  - If you are having issues with the service, you can examine the logs for the service:
+    - journalctl --user -xefu $service_name"
+  exit
+fi
+
+current_script_directory="$(dirname "$0")"
+project_root_directory="$(cd "${current_script_directory}" && pwd)"
+working_directory="${project_root_directory}"
+
+# parse args
+while test $# -gt 0; do
+  case "$1" in
+  --dry-run)
+    # print output to console; do not write any files
+    dry_run=1
+    ;;
+  --podman)
+    # use docker instead of podman
+    use_podman=1
+    ;;
+  esac
+  shift
+done
+
+# navigate to current script directory
+cd "$current_script_directory" || exit 1
+
+# maybe source dotenv
+dotenv_path="${project_root_directory}/.env"
+if [ -f "$dotenv_path" ]; then
+  if [ "$dry_run" != 1 ]; then
+    echo "Importing environment from '$dotenv_path'..."
+  fi
+
+  set -o allexport
+  # shellcheck source=/dev/null
+  . "${project_root_directory}/.env"
+  set +o allexport
+else
+  printf "\033[33mNo dotenv file exists found at '%s'. The generated systemd file may not have all expected environment variables.\nIf you are configuring your environment by a means other than dotenv files (e.g. Ansible), then you can safely ignore this message.\033[39m\n" "$dotenv_path"
+fi
+
+# use_podman
+if [ "$use_podman" = 1 ]; then
+  # configure service for use with podman
+  podman_socket_path=$(podman info --format '{{.Host.RemoteSocket.Path}}')
+  maybe_podman_config=" -H unix:${podman_socket_path}"
+fi
+
+# containers_to_run #
+containers_to_run="-f compose.yaml"
+
+# for dry_run, print output to terminal instead of writing to a file
+if [ "$dry_run" = 1 ]; then
+  output_to=/dev/stdout
+else
+  output_to="${HOME}/.config/systemd/user/${service_name}.service"
+fi
+
+if [ "$dry_run" != 1 ]; then
+  echo "Creating systemd service file: '${output_to}'"
+fi
+
+command_to_run="$(which docker-compose)${maybe_podman_config} $containers_to_run"
+
+# generate the service file
+echo "[Unit]
+Description=$service_name
+Wants=network-online.target
+After=network-online.target
+Requires=podman.service
+RequiresMountsFor=/run/user/$(id -u)/containers
+
+[Service]
+Restart=always
+WorkingDirectory=$working_directory
+
+
+# ENVIRONMENT #
+Environment=POSTGRES_USER=\"$POSTGRES_USER\"
+Environment=POSTGRES_PASSWORD=\"$POSTGRES_PASSWORD\"
+
+# docker
+# fix container timeout issues caused by slow CPU and/or RAM
+# Environment=DOCKER_CLIENT_TIMEOUT=180
+# Environment=COMPOSE_HTTP_TIMEOUT=180
+Environment=COMPOSE_PROJECT_NAME=\"${COMPOSE_PROJECT_NAME:-$service_name}\"
+
+# LIFECYCLE #
+ExecStartPre=$command_to_run down
+ExecStart=$command_to_run up
+ExecStop=$command_to_run down -t 5
+
+[Install]
+WantedBy=default.target" >"${output_to}"
