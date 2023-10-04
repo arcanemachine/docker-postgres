@@ -9,15 +9,12 @@ services:
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?}"
     volumes:
       - "./volumes/postgres:/var/lib/postgresql/data"
-    # networks:
-    #   - "postgres"
-    # ports:
-    #   - "5432"
-    network_mode: "host"
+    # network_mode: "host"
+    networks:
+      - "postgres"
+    ports:
+      - "5432"
 
-# networks:
-#   postgres:
-#     external: true
-
-volumes:
+networks:
   postgres:
+    external: true
