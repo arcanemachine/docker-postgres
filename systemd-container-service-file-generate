@@ -77,6 +77,8 @@ if [ "$use_podman" = 1 ]; then
   # configure service for use with podman
   podman_socket_path=$(podman info --format '{{.Host.RemoteSocket.Path}}')
   maybe_podman_config=" -H unix:${podman_socket_path}"
+else
+  use_docker=1 # use docker-specific options in the systemd service file
 fi
 
 # containers_to_run #
@@ -98,10 +100,11 @@ command_to_run="$(which docker-compose)${maybe_podman_config} $containers_to_run
 # generate the service file
 echo "[Unit]
 Description=$service_name
-Wants=network-online.target
-After=network-online.target
-Requires=podman.service
-RequiresMountsFor=/run/user/$(id -u)/containers
+${use_docker:+After=docker.service}
+${use_podman:+Wants=network-online.target}
+${use_podman:+After=network-online.target}
+${use_podman:+Requires=podman.service}
+${use_podman:+RequiresMountsFor=/run/user/$(id -u)/containers}
 
 [Service]
 Restart=always
